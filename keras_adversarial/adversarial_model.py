@@ -108,6 +108,14 @@ class AdversarialModel(Model):
             for name in models[i].metrics_names:
                 self.metrics_names.append("{}_{}".format(self.player_names[i], name))
 
+        self._feed_outputs = self.outputs
+        self._feed_output_names = self.output_names
+        self._feed_output_shapes = self.internal_output_shapes
+        self._feed_loss_fns = self.loss_functions
+        self._feed_sample_weight_modes = self.sample_weight_modes
+        self._feed_input_names = self.input_names
+        self._feed_input_shapes = self.internal_input_shapes
+
         # total loss is sum of losses
         self.total_loss = np.float32(0)
         for model in models:

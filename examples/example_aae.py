@@ -6,29 +6,36 @@ import matplotlib as mpl
 # This line allows mpl to run with no DISPLAY defined
 mpl.use('Agg')
 
+import os
+import sys
+
 from keras.layers import Dense, Reshape, Flatten, Input, merge, Dropout
 from keras.models import Sequential, Model
 from keras.optimizers import Adam
-from keras.regularizers import l1, l1l2
+from keras.regularizers import l1, l1_l2
 import keras.backend as K
 import pandas as pd
 import numpy as np
 
+from mnist_utils import mnist_data
+from keras.layers import BatchNormalization, LeakyReLU, Activation
+
+file_path = os.path.dirname(os.path.realpath(__file__))
+lib_path = os.path.abspath(os.path.join(file_path, '..'))
+sys.path.append(lib_path)
+
 from keras_adversarial import AdversarialModel, ImageGridCallback, simple_gan, gan_targets, fix_names, n_choice, \
     simple_bigan
 from keras_adversarial import AdversarialOptimizerSimultaneous, normal_latent_sampling, AdversarialOptimizerAlternating
-from mnist_utils import mnist_data
-from keras.layers import BatchNormalization, LeakyReLU, Activation
-import os
 
 
 def model_generator(latent_dim, input_shape, hidden_dim=512, reg=lambda: l1(1e-7)):
     return Sequential([
-        Dense(hidden_dim, name="generator_h1", input_dim=latent_dim, W_regularizer=reg()),
+        Dense(hidden_dim, name="generator_h1", input_dim=latent_dim, kernel_regularizer=reg()),
         LeakyReLU(0.2),
-        Dense(hidden_dim, name="generator_h2", W_regularizer=reg()),
+        Dense(hidden_dim, name="generator_h2", kernel_regularizer=reg()),
         LeakyReLU(0.2),
-        Dense(np.prod(input_shape), name="generator_x_flat", W_regularizer=reg()),
+        Dense(np.prod(input_shape), name="generator_x_flat", kernel_regularizer=reg()),
         Activation('sigmoid'),
         Reshape(input_shape, name="generator_x")],
         name="generator")
@@ -37,26 +44,26 @@ def model_generator(latent_dim, input_shape, hidden_dim=512, reg=lambda: l1(1e-7
 def model_encoder(latent_dim, input_shape, hidden_dim=512, reg=lambda: l1(1e-7)):
     x = Input(input_shape, name="x")
     h = Flatten()(x)
-    h = Dense(hidden_dim, name="encoder_h1", W_regularizer=reg())(h)
+    h = Dense(hidden_dim, name="encoder_h1", kernel_regularizer=reg())(h)
     h = LeakyReLU(0.2)(h)
-    h = Dense(hidden_dim, name="encoder_h2", W_regularizer=reg())(h)
+    h = Dense(hidden_dim, name="encoder_h2", kernel_regularizer=reg())(h)
     h = LeakyReLU(0.2)(h)
-    mu = Dense(latent_dim, name="encoder_mu", W_regularizer=reg())(h)
-    log_sigma_sq = Dense(latent_dim, name="encoder_log_sigma_sq", W_regularizer=reg())(h)
+    mu = Dense(latent_dim, name="encoder_mu", kernel_regularizer=reg())(h)
+    log_sigma_sq = Dense(latent_dim, name="encoder_log_sigma_sq", kernel_regularizer=reg())(h)
     z = merge([mu, log_sigma_sq], mode=lambda p: p[0] + K.random_normal(K.shape(p[0])) * K.exp(p[1] / 2),
               output_shape=lambda p: p[0])
     return Model(x, z, name="encoder")
 
 
 def model_discriminator(latent_dim, output_dim=1, hidden_dim=512,
-                        reg=lambda: l1l2(1e-7, 1e-7)):
+                        reg=lambda: l1_l2(1e-7, 1e-7)):
     z = Input((latent_dim,))
     h = z
-    h = Dense(hidden_dim, name="discriminator_h1", W_regularizer=reg())(h)
+    h = Dense(hidden_dim, name="discriminator_h1", kernel_regularizer=reg())(h)
     h = LeakyReLU(0.2)(h)
-    h = Dense(hidden_dim, name="discriminator_h2", W_regularizer=reg())(h)
+    h = Dense(hidden_dim, name="discriminator_h2", kernel_regularizer=reg())(h)
     h = LeakyReLU(0.2)(h)
-    y = Dense(output_dim, name="discriminator_y", activation="sigmoid", W_regularizer=reg())(h)
+    y = Dense(output_dim, name="discriminator_y", activation="sigmoid", kernel_regularizer=reg())(h)
     return Model(z, y)
 
 
@@ -129,7 +136,7 @@ def example_aae(path, adversarial_optimizer):
     ntest = xtest.shape[0]
     ytest = [xtest, np.ones((ntest, 1)), np.zeros((ntest, 1)), xtest, np.zeros((ntest, 1)), np.ones((ntest, 1))]
     history = model.fit(x=xtrain, y=y, validation_data=(xtest, ytest), callbacks=[generator_cb, autoencoder_cb],
-                        nb_epoch=100, batch_size=32)
+                        epochs=100, batch_size=32)
 
     # save history
     df = pd.DataFrame(history.history)
